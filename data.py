@@ -1,9 +1,11 @@
+import json
+import re
 from typing import TypedDict
+import os
 
 import anthropic
 import dotenv
 from datasets import load_dataset
-import re
 
 dotenv.load_dotenv()
 client = anthropic.Anthropic()
@@ -27,6 +29,21 @@ class DatasetItem(TypedDict):
     answer_incorrect: Answer
 
 
+def save_to_json(dictionary, file_name):
+    # Create directory if not present
+    directory = os.path.dirname(file_name)
+    if directory != "" and not os.path.exists(directory):
+        os.makedirs(directory)
+
+    with open(file_name, "w") as f:
+        json.dump(dictionary, f)
+
+
+def load_from_json(file_name) -> dict:
+    with open(file_name, "r") as f:
+        return json.load(f)
+
+
 def make_correct_answer(item: dict) -> Answer:
     return {
         "numeric": float(item["answer"].split("#")[-1].replace(",", "").strip()),
@@ -36,7 +53,8 @@ def make_correct_answer(item: dict) -> Answer:
 
 def make_incorrect_answer(item: dict) -> Answer:
     return ""
-    raise NotImplementedError("TODO: fill in with Claude 3")
+    response = generate_wrong_proof(item["question"], item["answer_correct"]["proof"])
+    return {"numeric": float(response.split("#")[-1].strip()), "proof": response}
 
 
 def reformat_dataset_item(item: dict) -> DatasetItem:
@@ -46,7 +64,11 @@ def reformat_dataset_item(item: dict) -> DatasetItem:
     return item
 
 
-def load_data() -> tuple[list[DatasetItem], list[DatasetItem]]:
+def load_data():
+    return load_from_json("train_data.json"), load_from_json("test_data.json")
+
+
+def load_huggingface_data() -> tuple[list[DatasetItem], list[DatasetItem]]:
     dataset = load_dataset("gsm8k", "main")
     train_data, test_data = list(dataset["train"]), list(dataset["test"])
 

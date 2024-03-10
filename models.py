@@ -3,8 +3,10 @@ from data import load_data, DatasetItem
 from typing import Callable
 import random
 
-DEBATER_MODEL_NAME = "WizardLM/WizardMath-70B-V1.0"
-JUDGE_MODEL_NAME = "WizardLM/WizardMath-70B-V1.0"
+WIZARDMATH_NAME = "WizardLM/WizardMath-70B-V1.0"
+
+DEBATER_MODEL_NAME = WIZARDMATH_NAME
+JUDGE_MODEL_NAME = WIZARDMATH_NAME
 
 
 def format_wizard_math_prompt(question):
@@ -18,9 +20,7 @@ def format_wizard_math_prompt(question):
 # Custom prompt format functions for different models
 # E.g. instruction formatting
 FORMAT_FUNCTIONS = {
-    JUDGE_MODEL_NAME: lambda x: format_wizard_math_prompt(x)
-    + "\n(",  # Because we want to get logits for A or B
-    DEBATER_MODEL_NAME: format_wizard_math_prompt,
+    WIZARDMATH_NAME: format_wizard_math_prompt,
 }
 
 
@@ -60,7 +60,7 @@ def make_proof_prompt(
 ):
     return f"""Below are two proofs that claim to solve the question: {question}
 
-Explain why proof ({justify_letter}) for answer {justify_numeric} is correct.
+Argue that proof ({justify_letter}) for answer {justify_numeric} is correct and the other proof is incorrect.
 
 (A) {proof_a}
 
@@ -169,18 +169,21 @@ def main():
     judge_model = AutoModelForCausalLM.from_pretrained(
         JUDGE_MODEL_NAME, load_in_8bit=True
     )
+
     a_token = tokenizer.encode("A")[-1]
     b_token = tokenizer.encode("B")[-1]
-    for item in train_data:
+    for item in train_data[:100]:
         question_correct, question_incorrect, is_proof_a_correct = (
             get_debater_questions(item)
         )
+        # Response of debater tasked with justifying the correct answer
         response_correct = generate_response(
             question_correct,
             debater_one,
             tokenizer,
             prompt_format_fn=FORMAT_FUNCTIONS[DEBATER_MODEL_NAME],
         )
+        # Response of debater tasked with justifying the incorrect answer
         response_incorrect = generate_response(
             question_incorrect,
             debater_two,
@@ -202,7 +205,8 @@ def main():
             judge_question,
             judge_model,
             tokenizer,
-            prompt_format_fn=FORMAT_FUNCTIONS[JUDGE_MODEL_NAME],
+            # To prime it to predict tokens A or B
+            prompt_format_fn=lambda x: FORMAT_FUNCTIONS[JUDGE_MODEL_NAME](x) + "\n(",
         )
         correct_judge_prob = (
             judge_probs[a_token] if is_proof_a_correct else judge_probs[b_token]
@@ -215,7 +219,8 @@ def main():
             blind_judge_question,
             judge_model,
             tokenizer,
-            prompt_format_fn=FORMAT_FUNCTIONS[JUDGE_MODEL_NAME],
+            # To prime it to predict tokens A or B
+            prompt_format_fn=lambda x: FORMAT_FUNCTIONS[JUDGE_MODEL_NAME](x) + "\n(",
         )
         correct_blind_judge_prob = (
             blind_judge_probs[a_token]
@@ -256,3 +261,7 @@ Probability given to correct answer {item.answer_correct.numeric}: {correct_blin
 Probability given to incorrect answer {item.answer_incorrect.numeric}: {incorrect_blind_judge_prob*100:.2f}%    
 """
         )
+
+
+if __name__ == "__main__":
+    main()
