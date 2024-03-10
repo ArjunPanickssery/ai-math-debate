@@ -217,3 +217,16 @@ def generate_wrong_proof(question, correct_proof):
         ],
     )
     return extract_proof_from_string(message.content[0].text)
+
+if __name__ == '__main__':
+    train_data, test_data = load_data()
+
+    print(f'{len(train_data)} to run!')
+    for i, item in enumerate(train_data):
+        if i % (len(train_data) // 20) == 0:
+            print(f'{i} done!')
+            save_to_json(train_data, 'train_data.json')
+
+        if item['answer_incorrect'] == '':
+            response = generate_wrong_proof(item["question"], item["answer_correct"]["proof"])
+            item['answer_incorrect'] = {"numeric": float(response.split("#")[-1].strip()), "proof": response}
