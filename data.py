@@ -65,7 +65,7 @@ def reformat_dataset_item(item: dict) -> DatasetItem:
 
 
 def load_data():
-    return load_from_json("train_data.json"), load_from_json("test_data.json")
+    return load_from_json("data/train_data.json"), load_from_json("data/test_data.json")
 
 
 def load_huggingface_data() -> tuple[list[DatasetItem], list[DatasetItem]]:
