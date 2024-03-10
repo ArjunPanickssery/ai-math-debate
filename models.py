@@ -1,7 +1,8 @@
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from data import load_data, DatasetItem
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from data import load_data, DatasetItem, save_to_json
 from typing import Callable
 import random
+import torch
 
 WIZARDMATH_NAME = "WizardLM/WizardMath-70B-V1.0"
 
@@ -36,7 +37,7 @@ def generate_response(
 ):
     full_prompt = prompt_format_fn(question)
     input_ids = tokenize_input(full_prompt, tokenizer)
-    output = model.generate(input_ids, max_length=100)
+    output = model.generate(input_ids, max_new_tokens=500, temperature=0)
     decoded = tokenizer.decode(output[0], skip_special_tokens=True)
     response = decoded.split("Response:")[1].strip()
     return response
@@ -72,7 +73,7 @@ def get_debater_questions(dataset_item: DatasetItem):
     """
     Both proofs together make up the question
     """
-    a, b = dataset_item.answer_correct.proof, dataset_item.answer_incorrect.proof
+    a, b = dataset_item['answer_correct']['proof'], dataset_item['answer_incorrect']['proof']
     correct_letter, incorrect_letter = "A", "B"
 
     # Randomize the order of the proofs so that the judge doesn't learn to always pick the first one
@@ -81,14 +82,14 @@ def get_debater_questions(dataset_item: DatasetItem):
         correct_letter, incorrect_letter = incorrect_letter, correct_letter
 
     question_correct = make_proof_prompt(
-        dataset_item.question, a, b, correct_letter, dataset_item.answer_correct.numeric
+        dataset_item['question'], a, b, correct_letter, dataset_item['answer_correct']['numeric']
     )
     question_incorrect = make_proof_prompt(
-        dataset_item.question,
+        dataset_item['question'],
         a,
         b,
         incorrect_letter,
-        dataset_item.answer_incorrect.numeric,
+        dataset_item['answer_incorrect']['numeric'],
     )
     return question_correct, question_incorrect, (correct_letter == "A")
 
@@ -104,30 +105,30 @@ def get_judge_question(
     # So we need `is_a_correct` to determine which of the correct or incorrect answers / responses to use
     if is_a_correct:
         numeric_a, proof_a, justification_a = (
-            dataset_item.answer_correct.numeric,
-            dataset_item.answer_correct.proof,
+            dataset_item['answer_correct']['numeric'],
+            dataset_item['answer_correct']['proof'],
             correct_debater_response,
         )
         numeric_b, proof_b, justification_b = (
-            dataset_item.answer_incorrect.numeric,
-            dataset_item.answer_incorrect.proof,
+            dataset_item['answer_incorrect']['numeric'],
+            dataset_item['answer_incorrect']['proof'],
             incorrect_debater_response,
         )
     else:
         numeric_a, proof_a, justification_a = (
-            dataset_item.answer_incorrect.numeric,
-            dataset_item.answer_incorrect.proof,
+            dataset_item['answer_incorrect']['numeric'],
+            dataset_item['answer_incorrect']['proof'],
             incorrect_debater_response,
         )
         numeric_b, proof_b, justification_b = (
-            dataset_item.answer_correct.numeric,
-            dataset_item.answer_correct.proof,
+            dataset_item['answer_correct']['numeric'],
+            dataset_item['answer_correct']['proof'],
             correct_debater_response,
         )
 
     if is_blind:
         # Blind judge does not get to see the justifications
-        return f"""You are given the following question: {dataset_item.question}
+        return f"""You are given the following question: {dataset_item['question']}
 
 Here are arguments for two different answers:
 
@@ -142,7 +143,7 @@ Proof: {proof_b}
 Which answer is correct - (A) {numeric_a} or (B) {numeric_b}?
 """
 
-    return f"""You are given the following question: {dataset_item.question}
+    return f"""You are given the following question: {dataset_item['question']}
 
 Here are arguments for two different answers:
 
@@ -161,14 +162,17 @@ Which answer is correct - (A) {numeric_a} or (B) {numeric_b}?
 
 
 def main():
+    outputs = []
+    print(f'Device count: {torch.cuda.device_count()}')
+
     tokenizer = AutoTokenizer.from_pretrained(DEBATER_MODEL_NAME)
     train_data, test_data = load_data()
-    debater_one = debater_two = AutoModelForCausalLM.from_pretrained(
-        DEBATER_MODEL_NAME, load_in_8bit=True
-    )
-    judge_model = AutoModelForCausalLM.from_pretrained(
-        JUDGE_MODEL_NAME, load_in_8bit=True
-    )
+    
+    print('Loading debater ...')
+    debater_one = debater_two = AutoModelForCausalLM.from_pretrained(DEBATER_MODEL_NAME, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_8bit = True))
+    print('Loading judge ...')
+    judge_model = AutoModelForCausalLM.from_pretrained(JUDGE_MODEL_NAME, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_8bit = True))
+    print('Loaded models.')
 
     a_token = tokenizer.encode("A")[-1]
     b_token = tokenizer.encode("B")[-1]
@@ -233,12 +237,11 @@ def main():
             else blind_judge_probs[a_token]
         )
 
-        print(
-            f"""
+        output = f"""
 [ORIGINAL DATA]
-Question: {item.question}
-Correct proof: {item.answer_correct.proof}
-Incorrect proof: {item.answer_incorrect.proof}
+Question: {item['question']}
+Correct proof: {item['answer_correct']['proof']}
+Incorrect proof: {item['answer_incorrect']['proof']}
 
 [RESPONSE OF DEBATER JUSTIFYING CORRECT ANSWER]
 {response_correct}
@@ -250,18 +253,20 @@ Incorrect proof: {item.answer_incorrect.proof}
 {judge_question}
 
 [PROBABILITIES OF JUDGE]
-Probability given to correct answer {item.answer_correct.numeric}: {correct_judge_prob*100:.2f}%
-Probability given to incorrect answer {item.answer_incorrect.numeric}: {incorrect_judge_prob*100:.2f}%
+Probability given to correct answer {item['answer_correct']['numeric']}: {correct_judge_prob*100:.2f}%
+Probability given to incorrect answer {item['answer_incorrect']['numeric']}: {incorrect_judge_prob*100:.2f}%
 
 [INPUT TO BLIND JUDGE]
 {blind_judge_question}
 
 [PROBABILITIES OF BLIND JUDGE]
-Probability given to correct answer {item.answer_correct.numeric}: {correct_blind_judge_prob*100:.2f}%
-Probability given to incorrect answer {item.answer_incorrect.numeric}: {incorrect_blind_judge_prob*100:.2f}%    
+Probability given to correct answer {item['answer_correct']['numeric']}: {correct_blind_judge_prob*100:.2f}%
+Probability given to incorrect answer {item['answer_incorrect']['numeric']}: {incorrect_blind_judge_prob*100:.2f}%    
 """
-        )
-
+        print(output)
+        outputs.append(output)
+    
+    save_to_json(outputs, 'outputs.json')
 
 if __name__ == "__main__":
     main()
