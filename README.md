@@ -1,11 +1,3 @@
-# DEBATE
+# AI Math Debate
 
-yes that's right
-
-2 models debating
-
-about math questions
-
-like in this post: https://www.alignmentforum.org/posts/QtqysYdJRenWFeWc4/anthropic-fall-2023-debate-progress-update
-
-but better
+Debate on GSM8K inspired by this post: https://www.alignmentforum.org/posts/QtqysYdJRenWFeWc4/anthropic-fall-2023-debate-progress-update
