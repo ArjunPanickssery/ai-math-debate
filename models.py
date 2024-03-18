@@ -1,14 +1,21 @@
+import os
+os.environ['TRANSFORMERS_CACHE'] = '/projects/bbry/apanickssery/'
+
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from data import load_data, DatasetItem, save_to_json
 from typing import Callable
+from dotenv import load_dotenv
 import random
 import torch
 
+load_dotenv()
+HUGGINGFACE_TOKEN = os.getenv("HF_TOKEN")
+
 WIZARDMATH_NAME = "WizardLM/WizardMath-70B-V1.0"
+LLAMA_NAME = "meta-llama/Llama-2-7b-chat-hf"
 
 DEBATER_MODEL_NAME = WIZARDMATH_NAME
-JUDGE_MODEL_NAME = WIZARDMATH_NAME
-
+JUDGE_MODEL_NAME = LLAMA_MODEL_NAME
 
 def format_wizard_math_prompt(question):
     """
@@ -17,11 +24,18 @@ def format_wizard_math_prompt(question):
     """
     return f"Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{question}\n\n### Response:"
 
+def format_llama_chat_prompt(question):
+    return f"""<s>[INST] <<SYS>>
+You are a judge of debates. You use your best judgment to make final decisions between the arguments of debaters.
+<</SYS>>
+
+{question} [/INST] """
 
 # Custom prompt format functions for different models
 # E.g. instruction formatting
 FORMAT_FUNCTIONS = {
     WIZARDMATH_NAME: format_wizard_math_prompt,
+    LLAMA_NAME: format_llama_chat_prompt
 }
 
 
