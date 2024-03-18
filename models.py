@@ -1,5 +1,5 @@
 import os
-os.environ['TRANSFORMERS_CACHE'] = '/projects/bbry/apanickssery/'
+os.environ['TRANSFORMERS_CACHE'] = '/scratch/apanickssery/'
 
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from data import load_data, DatasetItem, save_to_json
