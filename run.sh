@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=1  # could be 1 for py-torch
 #SBATCH --cpus-per-task=64   # spread out to use 1 core per numa, set to 64 if tasks is 1
 #SBATCH --constraint="scratch"
-#SBATCH --gpus-per-node=1
+#SBATCH --gpus-per-node=4
 #SBATCH --gpu-bind=closest   # select a cpu close to gpu on pci bus topology
 #SBATCH --account=bbry-delta-gpu
 #SBATCH --exclusive  # dedicated node for this job
@@ -21,7 +21,7 @@ module list  # job documentation and metadata
 
 echo "job is starting on `hostname`"
 
-module load python/3.11.4
+module load python/3.11.6
 
 #source /u/apanickssery/venv/bin/activate
 
@@ -30,7 +30,7 @@ export TORCH_SHOW_CPP_STACKTRACE=1
 export OMP_NUM_THREADS=1  # if code is not multithreaded, otherwise set to 8 or 16
 # srun -N 1 -n 4 ./a.out > myjob.out
 # py-torch example, --ntasks-per-node=1 --cpus-per-task=64
-source /u/apanickssery/venv/bin/activate
+source /u/apanickssery/ai-math-debate/venv/bin/activate
 
 # Get wandb key from the environment variable and log in with it
 wandb
